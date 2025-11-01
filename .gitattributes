@@ -1,0 +1,16 @@
+# Ensure PowerShell scripts always use Windows line endings (CRLF)
+# This prevents parsing errors when scripts are created on macOS/Linux
+*.ps1 text eol=crlf
+
+# Ensure SQL scripts use Windows line endings for consistency
+*.sql text eol=crlf
+
+# Bash scripts should use Unix line endings (LF)
+*.sh text eol=lf
+
+# Markdown and documentation files - use native line endings
+*.md text
+
+# YAML files - use native line endings
+*.yaml text
+*.yml text

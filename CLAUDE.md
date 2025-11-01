@@ -83,6 +83,13 @@ cd AWS/Scripts
 
 **Known Issue:** PowerShell scripts sometimes fail with "terminator expected" errors even with correct CRLF endings. Workaround: Open the script in an editor, add a blank line at the end, save, and remove it. This forces a proper file encoding refresh.
 
+**Preventing Future Line Ending Issues:**
+Create a `.gitattributes` file in the repository root with:
+```
+*.ps1 text eol=crlf
+```
+This ensures Git automatically maintains CRLF line endings for PowerShell scripts across all platforms.
+
 ### Infrastructure Deployment
 
 ```bash
@@ -192,7 +199,16 @@ cd C:\SQLAGScripts\Scripts
 # Download: https://www.microsoft.com/sql-server/sql-server-downloads
 # Use gMSA accounts: CONTOSO\sqlsvc$ and CONTOSO\sqlagent$ (no password)
 
+# IMPORTANT: Enable TCP/IP protocol
+# 1. Open SQL Server Configuration Manager
+# 2. Navigate to: SQL Server Network Configuration > Protocols for MSSQLSERVER
+# 3. Right-click TCP/IP > Enable
+# 4. Restart SQL Server service
+
 .\07-Enable-AlwaysOn.ps1
+
+# Optional but recommended: Install SSMS for easier management
+# Download: https://aka.ms/ssmsfullsetup
 ```
 
 ### Phase 5: Availability Group
@@ -228,7 +244,13 @@ sqlcmd -S SQL01 -i C:\SQLAGScripts\Scripts\10-Validate-AG.sql
 
 ### Issue 1: PowerShell Line Ending Errors
 **Symptom:** "Missing closing '}'" or "terminator expected" errors
-**Solution:** Run `Fix-LineEndings.sh` or manually edit file (add/remove blank line)
+**Root Cause:** Scripts created on macOS/Linux have Unix (LF) line endings; Windows PowerShell requires CRLF
+**Solution:** Run `Fix-LineEndings.sh` before first use:
+```bash
+cd AWS/Scripts
+./Fix-LineEndings.sh
+```
+**Workaround if still failing:** Sometimes even with correct CRLF endings, PowerShell fails to parse. Open the script in an editor, add a blank line at the end, save, and remove it. This forces a proper file encoding refresh.
 
 ### Issue 2: AD Web Services Unavailable
 **Symptom:** "Unable to contact the server" when testing gMSA in `06-Install-SQLServer-Prep.ps1`
@@ -262,6 +284,36 @@ Required ports: TCP 9389 (ADWS), 88 (Kerberos), 389 (LDAP), 636 (LDAPS), 53 (DNS
 nslookup SQL01
 nslookup SQL02
 ```
+
+### Issue 6: SQL Server TCP/IP Protocol Disabled
+**Symptom:** `Test-NetConnection -ComputerName SQL02 -Port 1433` fails; AG creation fails with connectivity errors
+**Root Cause:** SQL Server installs with TCP/IP protocol disabled by default
+**Solution:**
+```powershell
+# On both SQL01 and SQL02
+# 1. Open SQL Server Configuration Manager
+# 2. Navigate to: SQL Server Network Configuration > Protocols for MSSQLSERVER
+# 3. Right-click TCP/IP > Enable
+# 4. Restart SQL Server service
+Restart-Service MSSQLSERVER -Force
+
+# Verify
+Test-NetConnection -ComputerName SQL02 -Port 1433
+```
+
+### Issue 7: Windows Firewall Blocking SQL Connectivity
+**Symptom:** `Test-NetConnection` fails; AG creation fails even with TCP/IP enabled
+**Root Cause:** Windows Firewall blocks SQL Server port 1433 between nodes
+**Solution:**
+```powershell
+# Quick fix (on both SQL01 and SQL02)
+Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+
+# OR proper fix - add firewall rules
+New-NetFirewallRule -DisplayName "SQL Server" -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow
+New-NetFirewallRule -DisplayName "SQL Server Mirroring" -Direction Inbound -Protocol TCP -LocalPort 5022 -Action Allow
+```
+**Note:** Disabling firewall completely is acceptable in demo/lab environments. For production, use specific firewall rules.
 
 ## Default Credentials
 
